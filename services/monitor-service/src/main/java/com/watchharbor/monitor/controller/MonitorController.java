@@ -1,7 +1,5 @@
 package com.watchharbor.monitor.controller;
 
-import java.util.List;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,12 +8,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.watchharbor.monitor.dto.CreateMonitorRequest;
+import com.watchharbor.monitor.dto.MonitorPageResponse;
 import com.watchharbor.monitor.dto.MonitorResponse;
 import com.watchharbor.monitor.dto.UpdateMonitorRequest;
+import com.watchharbor.monitor.service.InvalidPaginationParameterException;
 import com.watchharbor.monitor.service.MonitorService;
 
 import jakarta.validation.Valid;
@@ -31,8 +32,23 @@ public class MonitorController {
     }
 
     @GetMapping
-    public List<MonitorResponse> getAllMonitors() {
-        return monitorService.getAllMonitors();
+    public MonitorPageResponse getAllMonitors(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        if (page < 0) {
+            throw new InvalidPaginationParameterException(
+                    "Page must be zero or greater"
+            );
+        }
+
+        if (size < 1 || size > 100) {
+            throw new InvalidPaginationParameterException(
+                    "Page size must be between 1 and 100"
+            );
+        }
+
+        return monitorService.getAllMonitors(page, size);
     }
 
     @PostMapping

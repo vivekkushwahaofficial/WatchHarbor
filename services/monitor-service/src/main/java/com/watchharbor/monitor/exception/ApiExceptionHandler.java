@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.watchharbor.monitor.service.InvalidMonitorUrlException;
+import com.watchharbor.monitor.service.InvalidPaginationParameterException;
 import com.watchharbor.monitor.service.MonitorNotFoundException;
 
 @RestControllerAdvice
@@ -57,6 +58,23 @@ public class ApiExceptionHandler {
         ));
         problem.setTitle("Validation failed");
         problem.setProperty("errors", errors);
+
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidPaginationParameterException.class)
+    public ProblemDetail handleInvalidPaginationParameter(
+            InvalidPaginationParameterException exception) {
+
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                exception.getMessage()
+        );
+
+        problem.setTitle("Invalid pagination parameters");
+        problem.setType(URI.create(
+                "urn:watchharbor:problem:invalid-pagination"
+        ));
 
         return problem;
     }

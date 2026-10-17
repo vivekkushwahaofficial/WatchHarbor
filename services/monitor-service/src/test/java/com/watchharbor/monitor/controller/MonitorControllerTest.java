@@ -22,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.watchharbor.monitor.dto.CreateMonitorRequest;
+import com.watchharbor.monitor.dto.MonitorPageResponse;
 import com.watchharbor.monitor.dto.MonitorResponse;
 import com.watchharbor.monitor.dto.UpdateMonitorRequest;
 import com.watchharbor.monitor.service.MonitorNotFoundException;
@@ -46,17 +47,33 @@ class MonitorControllerTest {
     }
 
     @Test
-    void getAllMonitorsShouldReturnMonitorList() throws Exception {
-        given(monitorService.getAllMonitors())
-                .willReturn(List.of(sampleMonitor()));
+    void getAllMonitorsShouldReturnPaginatedMonitorResponse()
+            throws Exception {
+
+        given(monitorService.getAllMonitors(0, 20))
+                .willReturn(new MonitorPageResponse(
+                        List.of(sampleMonitor()),
+                        0,
+                        20,
+                        1,
+                        1,
+                        true,
+                        true
+                ));
 
         mockMvc.perform(get("/api/v1/monitors"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(1))
-                .andExpect(jsonPath("$[0].name")
+                .andExpect(jsonPath("$.content[0].id").value(1))
+                .andExpect(jsonPath("$.content[0].name")
                         .value("Example Website"))
-                .andExpect(jsonPath("$[0].url")
-                        .value("https://example.com"));
+                .andExpect(jsonPath("$.content[0].url")
+                        .value("https://example.com"))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.first").value(true))
+                .andExpect(jsonPath("$.last").value(true));
     }
 
     @Test
@@ -198,5 +215,30 @@ class MonitorControllerTest {
                             }
                             """))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getAllMonitorsShouldRejectNegativePage() throws Exception {
+        mockMvc.perform(get("/api/v1/monitors")
+                .param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title")
+                        .value("Invalid pagination parameters"));
+    }
+
+    @Test
+    void getAllMonitorsShouldRejectSizeAboveMaximum() throws Exception {
+        mockMvc.perform(get("/api/v1/monitors")
+                .param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title")
+                        .value("Invalid pagination parameters"));
+    }
+
+    @Test
+    void getAllMonitorsShouldRejectZeroSize() throws Exception {
+        mockMvc.perform(get("/api/v1/monitors")
+                .param("size", "0"))
+                .andExpect(status().isBadRequest());
     }
 }
