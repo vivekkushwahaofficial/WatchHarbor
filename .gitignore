@@ -1,0 +1,25 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Java and Maven
+target/
+*.class
+
+# Node.js
+node_modules/
+dist/
+coverage/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Operating system
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
