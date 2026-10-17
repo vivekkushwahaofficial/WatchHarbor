@@ -78,6 +78,13 @@
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Load local .env configuration for Spring Boot 4 -->
+        <dependency>
+            <groupId>me.paulschwarz</groupId>
+            <artifactId>springboot4-dotenv</artifactId>
+            <version>5.1.0</version>
+        </dependency>
+
     </dependencies>
     <build>
         <plugins>
