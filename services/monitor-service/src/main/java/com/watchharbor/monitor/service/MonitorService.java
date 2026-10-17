@@ -2,12 +2,16 @@ package com.watchharbor.monitor.service;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.watchharbor.monitor.dto.CreateMonitorRequest;
+import com.watchharbor.monitor.dto.MonitorPageResponse;
 import com.watchharbor.monitor.dto.MonitorResponse;
 import com.watchharbor.monitor.dto.UpdateMonitorRequest;
 import com.watchharbor.monitor.entity.Monitor;
@@ -36,11 +40,19 @@ public class MonitorService {
     }
 
     @Transactional(readOnly = true)
-    public List<MonitorResponse> getAllMonitors() {
-        return monitorRepository.findAll()
-                .stream()
-                .map(MonitorResponse::from)
-                .toList();
+    public MonitorPageResponse getAllMonitors(int page, int size) {
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "createdAt")
+                        .and(Sort.by(Sort.Direction.DESC, "id"))
+        );
+
+        Page<MonitorResponse> monitorPage = monitorRepository
+                .findAll(pageable)
+                .map(MonitorResponse::from);
+
+        return MonitorPageResponse.from(monitorPage);
     }
 
     @Transactional(readOnly = true)

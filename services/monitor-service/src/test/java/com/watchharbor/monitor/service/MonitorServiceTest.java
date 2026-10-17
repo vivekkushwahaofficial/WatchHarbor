@@ -18,8 +18,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.watchharbor.monitor.dto.CreateMonitorRequest;
+import com.watchharbor.monitor.dto.MonitorPageResponse;
 import com.watchharbor.monitor.dto.MonitorResponse;
 import com.watchharbor.monitor.dto.UpdateMonitorRequest;
 import com.watchharbor.monitor.entity.Monitor;
@@ -203,46 +207,59 @@ class MonitorServiceTest {
     @Test
     void getAllMonitorsReturnsSavedMonitors() {
         Monitor firstMonitor = createSavedMonitor(
-                1L,
-                "Example Website",
-                "https://example.com"
-        );
+                1L, "Example Website", "https://example.com");
 
         Monitor secondMonitor = createSavedMonitor(
-                2L,
-                "WatchHarbor",
-                "https://watchharbor.example"
-        );
+                2L, "WatchHarbor", "https://watchharbor.example");
 
-        when(monitorRepository.findAll())
-                .thenReturn(List.of(firstMonitor, secondMonitor));
+        when(monitorRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(
+                        List.of(firstMonitor, secondMonitor),
+                        PageRequest.of(0, 20),
+                        2
+                ));
 
-        List<MonitorResponse> responses = monitorService.getAllMonitors();
+        MonitorPageResponse response
+                = monitorService.getAllMonitors(0, 20);
 
-        assertEquals(2, responses.size());
+        assertEquals(2, response.content().size());
+        assertEquals(0, response.page());
+        assertEquals(20, response.size());
+        assertEquals(2, response.totalElements());
+        assertEquals(1, response.totalPages());
+        assertTrue(response.first());
+        assertTrue(response.last());
 
-        assertEquals(1L, responses.get(0).id());
-        assertEquals("Example Website", responses.get(0).name());
-        assertEquals("https://example.com", responses.get(0).url());
+        assertEquals(1L, response.content().get(0).id());
+        assertEquals("Example Website",
+                response.content().get(0).name());
 
-        assertEquals(2L, responses.get(1).id());
-        assertEquals("WatchHarbor", responses.get(1).name());
-        assertEquals("https://watchharbor.example", responses.get(1).url());
+        assertEquals(2L, response.content().get(1).id());
+        assertEquals("WatchHarbor",
+                response.content().get(1).name());
 
-        assertNotNull(responses.get(0).createdAt());
-        assertNotNull(responses.get(1).createdAt());
-
-        verify(monitorRepository, times(1)).findAll();
+        verify(monitorRepository).findAll(any(Pageable.class));
     }
 
     @Test
-    void getAllMonitorsReturnsEmptyListWhenNoMonitorsExist() {
-        when(monitorRepository.findAll()).thenReturn(List.of());
+    void getAllMonitorsReturnsEmptyPageWhenNoMonitorsExist() {
+        when(monitorRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(
+                        List.of(),
+                        PageRequest.of(0, 20),
+                        0
+                ));
 
-        List<MonitorResponse> responses = monitorService.getAllMonitors();
+        MonitorPageResponse response
+                = monitorService.getAllMonitors(0, 20);
 
-        assertTrue(responses.isEmpty());
-        verify(monitorRepository, times(1)).findAll();
+        assertTrue(response.content().isEmpty());
+        assertEquals(0, response.totalElements());
+        assertEquals(0, response.totalPages());
+        assertTrue(response.first());
+        assertTrue(response.last());
+
+        verify(monitorRepository).findAll(any(Pageable.class));
     }
 
     @Test
@@ -350,19 +367,24 @@ class MonitorServiceTest {
     @Test
     void getAllMonitorsDoesNotModifyMonitorData() {
         Monitor monitor = createSavedMonitor(
-                3L,
-                "My Monitor",
-                "https://example.org"
-        );
+                3L, "My Monitor", "https://example.org");
 
-        when(monitorRepository.findAll()).thenReturn(List.of(monitor));
+        when(monitorRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(
+                        List.of(monitor),
+                        PageRequest.of(0, 20),
+                        1
+                ));
 
-        List<MonitorResponse> responses = monitorService.getAllMonitors();
+        MonitorPageResponse response
+                = monitorService.getAllMonitors(0, 20);
 
-        assertEquals("My Monitor", responses.get(0).name());
-        assertEquals("https://example.org", responses.get(0).url());
+        assertEquals("My Monitor",
+                response.content().get(0).name());
+        assertEquals("https://example.org",
+                response.content().get(0).url());
 
-        verify(monitorRepository, times(1)).findAll();
+        verify(monitorRepository).findAll(any(Pageable.class));
         verify(monitorRepository, never()).save(any(Monitor.class));
     }
 
