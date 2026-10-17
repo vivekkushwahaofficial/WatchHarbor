@@ -1,8 +1,5 @@
 package com.watchharbor.monitor.service;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -93,27 +90,6 @@ public class MonitorService {
     }
 
     private void validateUrl(String url) {
-        try {
-            URI uri = new URI(url);
-            String scheme = uri.getScheme();
-
-            boolean validScheme = scheme != null
-                    && (scheme.equalsIgnoreCase("http")
-                    || scheme.equalsIgnoreCase("https"));
-
-            if (!validScheme
-                    || uri.getHost() == null
-                    || uri.getHost().isBlank()
-                    || uri.getUserInfo() != null) {
-                throw new InvalidMonitorUrlException(
-                        "URL must be an absolute HTTP or HTTPS URL with a valid host"
-                );
-            }
-
-        } catch (URISyntaxException exception) {
-            throw new InvalidMonitorUrlException(
-                    "Monitor URL has an invalid format"
-            );
-        }
+        MonitorUrlValidator.validate(url);
     }
 }
