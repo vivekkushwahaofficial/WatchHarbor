@@ -8,10 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -35,12 +35,8 @@ class MonitorServiceTest {
     @Mock
     private MonitorRepository monitorRepository;
 
+    @InjectMocks
     private MonitorService monitorService;
-
-    @BeforeEach
-    void setUp() {
-        monitorService = new MonitorService(monitorRepository);
-    }
 
     @Test
     void deleteMonitorDeletesExistingMonitor() {
@@ -205,6 +201,62 @@ class MonitorServiceTest {
     }
 
     @Test
+    void createMonitorAcceptsHttpUrl() {
+        CreateMonitorRequest request = new CreateMonitorRequest(
+                "Example Website",
+                "http://example.com"
+        );
+
+        when(monitorRepository.save(any(Monitor.class)))
+                .thenAnswer(invocation -> {
+                    Monitor monitor = invocation.getArgument(0);
+                    return createSavedMonitor(
+                            1L,
+                            monitor.getName(),
+                            monitor.getUrl()
+                    );
+                });
+
+        MonitorResponse response = monitorService.createMonitor(request);
+
+        assertEquals("http://example.com", response.url());
+        verify(monitorRepository).save(any(Monitor.class));
+    }
+
+    @Test
+    void createMonitorRejectsUrlWithEmbeddedCredentials() {
+        CreateMonitorRequest request = new CreateMonitorRequest(
+                "Example Website",
+                "https://user:password@example.com"
+        );
+        InvalidMonitorUrlException exception = assertThrows(
+                InvalidMonitorUrlException.class,
+                () -> monitorService.createMonitor(request)
+        );
+
+        assertNotNull(exception.getMessage());
+
+        verify(monitorRepository, never()).save(any(Monitor.class));
+    }
+
+    @Test
+    void createMonitorRejectsUrlWithoutHostname() {
+        CreateMonitorRequest request = new CreateMonitorRequest(
+                "Example Website",
+                "https:///path"
+        );
+
+        InvalidMonitorUrlException exception = assertThrows(
+                InvalidMonitorUrlException.class,
+                () -> monitorService.createMonitor(request)
+        );
+
+        assertNotNull(exception.getMessage());
+
+        verify(monitorRepository, never()).save(any(Monitor.class));
+    }
+
+    @Test
     void getAllMonitorsReturnsSavedMonitors() {
         Monitor firstMonitor = createSavedMonitor(
                 1L, "Example Website", "https://example.com");
@@ -326,10 +378,12 @@ class MonitorServiceTest {
                 "not-a-valid-url"
         );
 
-        assertThrows(
+        InvalidMonitorUrlException exception = assertThrows(
                 InvalidMonitorUrlException.class,
                 () -> monitorService.updateMonitor(3L, request)
         );
+
+        assertNotNull(exception.getMessage());
 
         assertEquals("Original Website", monitor.getName());
         assertEquals(
