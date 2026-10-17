@@ -1,13 +1,16 @@
 package com.watchharbor.monitor.exception;
 
-import com.watchharbor.monitor.service.InvalidMonitorUrlException;
-import com.watchharbor.monitor.service.MonitorNotFoundException;
+import java.net.URI;
+import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import com.watchharbor.monitor.service.InvalidMonitorUrlException;
+import com.watchharbor.monitor.service.MonitorNotFoundException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -36,16 +39,25 @@ public class ApiExceptionHandler {
     public ProblemDetail handleValidationError(
             MethodArgumentNotValidException exception) {
 
-        String message = exception.getBindingResult()
+        List<String> errors = exception.getBindingResult()
                 .getFieldErrors()
                 .stream()
-                .map(error -> error.getDefaultMessage())
-                .findFirst()
-                .orElse("Request validation failed");
+                .map(error -> error.getField() + ": "
+                        + error.getDefaultMessage())
+                .distinct()
+                .toList();
 
-        return ProblemDetail.forStatusAndDetail(
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.BAD_REQUEST,
-                message
+                "Request validation failed"
         );
+
+        problem.setType(URI.create(
+                "urn:watchharbor:problem:validation-error"
+        ));
+        problem.setTitle("Validation failed");
+        problem.setProperty("errors", errors);
+
+        return problem;
     }
 }
