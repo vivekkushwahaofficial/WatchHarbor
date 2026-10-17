@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
@@ -12,6 +14,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -20,6 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.watchharbor.monitor.dto.CreateMonitorRequest;
 import com.watchharbor.monitor.dto.MonitorResponse;
+import com.watchharbor.monitor.dto.UpdateMonitorRequest;
 import com.watchharbor.monitor.service.MonitorNotFoundException;
 import com.watchharbor.monitor.service.MonitorService;
 
@@ -132,5 +136,67 @@ class MonitorControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.detail")
                         .value("Monitor not found with id: 99"));
+    }
+
+    @Test
+    void updateMonitorShouldReturnUpdatedMonitor() throws Exception {
+        MonitorResponse response = new MonitorResponse(
+                1L,
+                "Updated Website",
+                "https://example.com",
+                java.time.Instant.parse("2026-01-01T00:00:00Z")
+        );
+
+        given(monitorService.updateMonitor(
+                eq(1L),
+                any(UpdateMonitorRequest.class)
+        )).willReturn(response);
+
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/v1/monitors/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                            {
+                              "name": "Updated Website",
+                              "url": "https://example.com"
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.name").value("Updated Website"))
+                .andExpect(jsonPath("$.url").value("https://example.com"));
+    }
+
+    @Test
+    void updateMonitorShouldRejectBlankName() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/v1/monitors/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                            {
+                              "name": " ",
+                              "url": "https://example.com"
+                            }
+                            """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updateMonitorShouldReturnNotFoundWhenMonitorDoesNotExist()
+            throws Exception {
+        given(monitorService.updateMonitor(
+                eq(999L),
+                any(UpdateMonitorRequest.class)
+        )).willThrow(new MonitorNotFoundException(
+                "Monitor not found with id: 999"
+        ));
+
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/v1/monitors/999")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                            {
+                              "name": "Updated Website",
+                              "url": "https://example.com"
+                            }
+                            """))
+                .andExpect(status().isNotFound());
     }
 }

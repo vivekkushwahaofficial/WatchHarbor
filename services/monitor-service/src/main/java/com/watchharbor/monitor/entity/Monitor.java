@@ -36,6 +36,11 @@ public class Monitor {
         this.url = url;
     }
 
+    public void updateDetails(String name, String url) {
+        this.name = name;
+        this.url = url;
+    }
+
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {
