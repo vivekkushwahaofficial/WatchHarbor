@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.watchharbor.monitor.dto.CreateMonitorRequest;
 import com.watchharbor.monitor.dto.MonitorResponse;
+import com.watchharbor.monitor.dto.UpdateMonitorRequest;
 import com.watchharbor.monitor.entity.Monitor;
 import com.watchharbor.monitor.repository.MonitorRepository;
 
@@ -60,6 +61,23 @@ public class MonitorService {
                 ));
 
         monitorRepository.delete(monitor);
+    }
+
+    @Transactional
+    public MonitorResponse updateMonitor(Long id, UpdateMonitorRequest request) {
+        Monitor monitor = monitorRepository.findById(id)
+                .orElseThrow(() -> new MonitorNotFoundException(
+                        "Monitor not found with id: " + id
+                ));
+
+        String name = request.name().trim();
+        String url = request.url().trim();
+
+        validateUrl(url);
+
+        monitor.updateDetails(name, url);
+
+        return MonitorResponse.from(monitor);
     }
 
     private void validateUrl(String url) {

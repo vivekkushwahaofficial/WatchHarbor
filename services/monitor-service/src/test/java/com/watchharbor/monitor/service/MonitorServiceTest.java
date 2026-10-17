@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.watchharbor.monitor.dto.CreateMonitorRequest;
 import com.watchharbor.monitor.dto.MonitorResponse;
+import com.watchharbor.monitor.dto.UpdateMonitorRequest;
 import com.watchharbor.monitor.entity.Monitor;
 import com.watchharbor.monitor.repository.MonitorRepository;
 
@@ -242,6 +243,108 @@ class MonitorServiceTest {
 
         assertTrue(responses.isEmpty());
         verify(monitorRepository, times(1)).findAll();
+    }
+
+    @Test
+    void updateMonitorUpdatesExistingMonitor() {
+        Monitor monitor = createSavedMonitor(
+                1L,
+                "Old Website",
+                "https://old.example.com"
+        );
+
+        when(monitorRepository.findById(1L))
+                .thenReturn(Optional.of(monitor));
+
+        UpdateMonitorRequest request = new UpdateMonitorRequest(
+                "Updated Website",
+                "https://example.com"
+        );
+
+        MonitorResponse response = monitorService.updateMonitor(1L, request);
+
+        assertEquals(1L, response.id());
+        assertEquals("Updated Website", response.name());
+        assertEquals("https://example.com", response.url());
+        assertNotNull(response.createdAt());
+
+        verify(monitorRepository, times(1)).findById(1L);
+    }
+
+    @Test
+    void updateMonitorTrimsNameAndUrl() {
+        Monitor monitor = createSavedMonitor(
+                2L,
+                "Old Website",
+                "https://old.example.com"
+        );
+
+        when(monitorRepository.findById(2L))
+                .thenReturn(Optional.of(monitor));
+
+        UpdateMonitorRequest request = new UpdateMonitorRequest(
+                "  Updated Website  ",
+                "  https://example.com  "
+        );
+
+        MonitorResponse response = monitorService.updateMonitor(2L, request);
+
+        assertEquals("Updated Website", response.name());
+        assertEquals("https://example.com", response.url());
+    }
+
+    @Test
+    void updateMonitorRejectsInvalidUrlWithoutChangingMonitor() {
+        Monitor monitor = createSavedMonitor(
+                3L,
+                "Original Website",
+                "https://original.example.com"
+        );
+
+        when(monitorRepository.findById(3L))
+                .thenReturn(Optional.of(monitor));
+
+        UpdateMonitorRequest request = new UpdateMonitorRequest(
+                "Changed Website",
+                "not-a-valid-url"
+        );
+
+        assertThrows(
+                InvalidMonitorUrlException.class,
+                () -> monitorService.updateMonitor(3L, request)
+        );
+
+        assertEquals("Original Website", monitor.getName());
+        assertEquals(
+                "https://original.example.com",
+                monitor.getUrl()
+        );
+
+        verify(monitorRepository, times(1)).findById(3L);
+    }
+
+    @Test
+    void updateMonitorThrowsExceptionWhenMonitorDoesNotExist() {
+        when(monitorRepository.findById(999L))
+                .thenReturn(Optional.empty());
+
+        UpdateMonitorRequest request = new UpdateMonitorRequest(
+                "Updated Website",
+                "https://example.com"
+        );
+
+        MonitorNotFoundException exception = assertThrows(
+                MonitorNotFoundException.class,
+                () -> monitorService.updateMonitor(999L, request)
+        );
+
+        assertEquals(
+                "Monitor not found with id: 999",
+                exception.getMessage()
+        );
+
+        verify(monitorRepository, times(1)).findById(999L);
+        verify(monitorRepository, never()).save(any(Monitor.class));
     }
 
     @Test
