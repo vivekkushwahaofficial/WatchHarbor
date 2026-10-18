@@ -1,6 +1,7 @@
 package com.watchharbor.worker;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 // Represents a monitoring job successfully claimed by a worker.
 public record MonitoringJob(
@@ -9,7 +10,8 @@ public record MonitoringJob(
         OffsetDateTime dueAt,
         String claimedBy,
         OffsetDateTime leaseUntil,
-        int attemptCount
+        int attemptCount,
+        UUID claimToken
         ) {
 
 }

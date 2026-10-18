@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -68,7 +69,8 @@ public class JobClaimService {
                         rs.getObject("due_at", OffsetDateTime.class),
                         null,
                         null,
-                        0
+                        0,
+                        null
                 )
         );
 
@@ -77,6 +79,9 @@ public class JobClaimService {
         }
 
         MonitoringJob candidate = candidates.get(0);
+
+        // Generate a unique token for this claim.
+        UUID claimToken = UUID.randomUUID();
 
         // Claim the locked job and return its updated values.
         MonitoringJob claimedJob = jdbcTemplate.queryForObject(
@@ -87,11 +92,12 @@ public class JobClaimService {
                     lease_until = CURRENT_TIMESTAMP
                         + (? * INTERVAL '1 second'),
                     attempt_count = attempt_count + 1,
+                    claim_token = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                   AND status = 'PENDING'
                 RETURNING id, monitor_id, due_at, claimed_by,
-                          lease_until, attempt_count
+                          lease_until, attempt_count, claim_token
                 """,
                 (rs, rowNum) -> new MonitoringJob(
                         rs.getLong("id"),
@@ -99,10 +105,12 @@ public class JobClaimService {
                         rs.getObject("due_at", OffsetDateTime.class),
                         rs.getString("claimed_by"),
                         rs.getObject("lease_until", OffsetDateTime.class),
-                        rs.getInt("attempt_count")
+                        rs.getInt("attempt_count"),
+                        rs.getObject("claim_token", UUID.class)
                 ),
                 workerId,
                 leaseDuration.toSeconds(),
+                claimToken,
                 candidate.id()
         );
 
@@ -113,14 +121,79 @@ public class JobClaimService {
     public int recoverExpiredLeases() {
         return jdbcTemplate.update(
                 """
-                UPDATE monitoring_worker.monitoring_jobs
-                SET status = 'PENDING',
-                    claimed_by = NULL,
-                    lease_until = NULL,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE status = 'CLAIMED'
-                  AND lease_until <= CURRENT_TIMESTAMP
-                """
+            UPDATE monitoring_worker.monitoring_jobs
+            SET status = 'PENDING',
+                claimed_by = NULL,
+                lease_until = NULL,
+                claim_token = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE status = 'CLAIMED'
+              AND lease_until <= CURRENT_TIMESTAMP
+            """
         );
+    }
+
+    @Transactional
+    public boolean completeJob(long jobId, UUID claimToken) {
+        Objects.requireNonNull(claimToken, "Claim token must not be null");
+
+        int updatedRows = jdbcTemplate.update(
+                """
+            UPDATE monitoring_worker.monitoring_jobs
+            SET status = 'SUCCEEDED',
+                claimed_by = NULL,
+                lease_until = NULL,
+                claim_token = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND status = 'CLAIMED'
+              AND claim_token = ?
+              AND lease_until > CURRENT_TIMESTAMP
+            """,
+                jobId,
+                claimToken
+        );
+
+        return updatedRows == 1;
+    }
+
+    @Transactional
+    public boolean failJob(
+            long jobId,
+            UUID claimToken,
+            String errorCode
+    ) {
+        Objects.requireNonNull(claimToken, "Claim token must not be null");
+
+        if (errorCode == null || errorCode.isBlank()) {
+            throw new IllegalArgumentException("Error code must not be blank");
+        }
+
+        if (errorCode.length() > 100) {
+            throw new IllegalArgumentException(
+                    "Error code must not exceed 100 characters"
+            );
+        }
+
+        int updatedRows = jdbcTemplate.update(
+                """
+            UPDATE monitoring_worker.monitoring_jobs
+            SET status = 'FAILED',
+                claimed_by = NULL,
+                lease_until = NULL,
+                claim_token = NULL,
+                last_error_code = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND status = 'CLAIMED'
+              AND claim_token = ?
+              AND lease_until > CURRENT_TIMESTAMP
+            """,
+                errorCode,
+                jobId,
+                claimToken
+        );
+
+        return updatedRows == 1;
     }
 }

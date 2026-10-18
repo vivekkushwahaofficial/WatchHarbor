@@ -413,6 +413,117 @@ class MonitoringWorkerApplicationTests {
         lockHolder.get(5, TimeUnit.SECONDS);
     }
 
+    @Test
+    void completesJobWithValidClaimToken() {
+        insertJob(-60);
+
+        MonitoringJob job = jobClaimService.claimNextJob(
+                "worker-complete",
+                Duration.ofMinutes(2)
+        ).orElseThrow();
+
+        boolean completed = jobClaimService.completeJob(
+                job.id(),
+                job.claimToken()
+        );
+
+        assertThat(completed).isTrue();
+
+        var row = jdbcTemplate.queryForMap(
+                """
+            SELECT status, claimed_by, lease_until, claim_token
+            FROM monitoring_worker.monitoring_jobs
+            WHERE id = ?
+            """,
+                job.id()
+        );
+
+        assertThat(row.get("status")).isEqualTo("SUCCEEDED");
+        assertThat(row.get("claimed_by")).isNull();
+        assertThat(row.get("lease_until")).isNull();
+        assertThat(row.get("claim_token")).isNull();
+    }
+
+    @Test
+    void failsJobWithValidClaimToken() {
+        insertJob(-60);
+
+        MonitoringJob job = jobClaimService.claimNextJob(
+                "worker-fail",
+                Duration.ofMinutes(2)
+        ).orElseThrow();
+
+        boolean failed = jobClaimService.failJob(
+                job.id(),
+                job.claimToken(),
+                "HTTP_TIMEOUT"
+        );
+
+        assertThat(failed).isTrue();
+
+        var row = jdbcTemplate.queryForMap(
+                """
+            SELECT status, last_error_code, claim_token
+            FROM monitoring_worker.monitoring_jobs
+            WHERE id = ?
+            """,
+                job.id()
+        );
+
+        assertThat(row.get("status")).isEqualTo("FAILED");
+        assertThat(row.get("last_error_code")).isEqualTo("HTTP_TIMEOUT");
+        assertThat(row.get("claim_token")).isNull();
+    }
+
+    @Test
+    void rejectsStaleClaimTokenAfterJobIsReclaimed() {
+        insertJob(-60);
+
+        MonitoringJob firstClaim = jobClaimService.claimNextJob(
+                "worker-old",
+                Duration.ofMinutes(2)
+        ).orElseThrow();
+
+        // Simulate expiry, then return the job to the queue.
+        jdbcTemplate.update(
+                """
+            UPDATE monitoring_worker.monitoring_jobs
+            SET lease_until = CURRENT_TIMESTAMP - INTERVAL '1 second'
+            WHERE id = ?
+            """,
+                firstClaim.id()
+        );
+
+        assertThat(jobClaimService.recoverExpiredLeases()).isEqualTo(1);
+
+        MonitoringJob secondClaim = jobClaimService.claimNextJob(
+                "worker-new",
+                Duration.ofMinutes(2)
+        ).orElseThrow();
+
+        assertThat(secondClaim.claimToken()).isNotEqualTo(firstClaim.claimToken());
+
+        // The old worker must not complete the new worker's claim.
+        assertThat(
+                jobClaimService.completeJob(
+                        firstClaim.id(),
+                        firstClaim.claimToken()
+                )
+        ).isFalse();
+
+        String status = jdbcTemplate.queryForObject(
+                """
+            SELECT status
+            FROM monitoring_worker.monitoring_jobs
+            WHERE id = ?
+            """,
+                String.class,
+                secondClaim.id()
+        );
+
+        assertThat(status).isEqualTo("CLAIMED");
+    }
+
     private long insertJob(long secondsFromNow) {
         long monitorId = MONITOR_IDS.incrementAndGet();
 
