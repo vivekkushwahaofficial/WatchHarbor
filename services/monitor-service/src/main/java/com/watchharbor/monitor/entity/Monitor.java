@@ -24,6 +24,15 @@ public class Monitor {
     @Column(nullable = false, length = 2048)
     private String url;
 
+    @Column(
+            name = "check_interval_seconds",
+            nullable = false
+    )
+    private int checkIntervalSeconds = 300;
+
+    @Column(nullable = false)
+    private boolean enabled = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -39,6 +48,19 @@ public class Monitor {
     public void updateDetails(String name, String url) {
         this.name = name;
         this.url = url;
+    }
+
+    public void updateScheduling(
+            Integer checkIntervalSeconds,
+            Boolean enabled
+    ) {
+        if (checkIntervalSeconds != null) {
+            this.checkIntervalSeconds = checkIntervalSeconds;
+        }
+
+        if (enabled != null) {
+            this.enabled = enabled;
+        }
     }
 
     @PrePersist
@@ -58,6 +80,14 @@ public class Monitor {
 
     public String getUrl() {
         return url;
+    }
+
+    public int getCheckIntervalSeconds() {
+        return checkIntervalSeconds;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 
     public Instant getCreatedAt() {
