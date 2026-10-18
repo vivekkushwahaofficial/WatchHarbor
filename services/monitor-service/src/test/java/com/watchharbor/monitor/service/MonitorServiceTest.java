@@ -442,6 +442,72 @@ class MonitorServiceTest {
         verify(monitorRepository, never()).save(any(Monitor.class));
     }
 
+    @Test
+    void createMonitorAppliesSchedulingSettings() {
+        CreateMonitorRequest request = new CreateMonitorRequest(
+                "Example Website",
+                "https://example.com",
+                600,
+                false
+        );
+
+        when(monitorRepository.save(any(Monitor.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        MonitorResponse response = monitorService.createMonitor(request);
+
+        assertEquals(600, response.checkIntervalSeconds());
+        assertEquals(false, response.enabled());
+    }
+
+    @Test
+    void updateMonitorAppliesSchedulingSettings() {
+        Monitor monitor = createSavedMonitor(
+                1L,
+                "Example Website",
+                "https://example.com"
+        );
+
+        when(monitorRepository.findById(1L))
+                .thenReturn(Optional.of(monitor));
+
+        UpdateMonitorRequest request = new UpdateMonitorRequest(
+                "Example Website",
+                "https://example.com",
+                600,
+                false
+        );
+
+        MonitorResponse response = monitorService.updateMonitor(1L, request);
+
+        assertEquals(600, response.checkIntervalSeconds());
+        assertEquals(false, response.enabled());
+    }
+
+    @Test
+    void updateMonitorPreservesSchedulingSettingsWhenOmitted() {
+        Monitor monitor = createSavedMonitor(
+                1L,
+                "Example Website",
+                "https://example.com"
+        );
+
+        monitor.updateScheduling(600, false);
+
+        when(monitorRepository.findById(1L))
+                .thenReturn(Optional.of(monitor));
+
+        UpdateMonitorRequest request = new UpdateMonitorRequest(
+                "Updated Website",
+                "https://example.com"
+        );
+
+        MonitorResponse response = monitorService.updateMonitor(1L, request);
+
+        assertEquals(600, response.checkIntervalSeconds());
+        assertEquals(false, response.enabled());
+    }
+
     private Monitor createSavedMonitor(Long id, String name, String url) {
         Monitor monitor = new Monitor(name, url);
 

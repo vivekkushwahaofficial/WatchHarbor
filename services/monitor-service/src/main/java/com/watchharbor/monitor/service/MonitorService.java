@@ -31,6 +31,12 @@ public class MonitorService {
         validateUrl(url);
 
         Monitor monitor = new Monitor(name, url);
+
+        monitor.updateScheduling(
+                request.checkIntervalSeconds(),
+                request.enabled()
+        );
+
         Monitor savedMonitor = monitorRepository.save(monitor);
 
         return MonitorResponse.from(savedMonitor);
@@ -83,8 +89,12 @@ public class MonitorService {
         String url = request.url().trim();
 
         validateUrl(url);
-
         monitor.updateDetails(name, url);
+
+        monitor.updateScheduling(
+                request.checkIntervalSeconds(),
+                request.enabled()
+        );
 
         return MonitorResponse.from(monitor);
     }
