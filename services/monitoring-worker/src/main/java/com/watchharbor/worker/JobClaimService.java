@@ -108,4 +108,19 @@ public class JobClaimService {
 
         return Optional.of(claimedJob);
     }
+
+    @Transactional
+    public int recoverExpiredLeases() {
+        return jdbcTemplate.update(
+                """
+                UPDATE monitoring_worker.monitoring_jobs
+                SET status = 'PENDING',
+                    claimed_by = NULL,
+                    lease_until = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE status = 'CLAIMED'
+                  AND lease_until <= CURRENT_TIMESTAMP
+                """
+        );
+    }
 }

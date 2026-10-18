@@ -40,16 +40,18 @@ class MonitoringWorkerApplicationTests {
     private final List<Long> createdMonitorIds = new ArrayList<>();
 
     @AfterEach
-    void cleanUpTestJobs() {
+    public void cleanUpTestJobs() {
         for (Long monitorId : createdMonitorIds) {
             jdbcTemplate.update(
                     """
-                    DELETE FROM monitoring_worker.monitoring_jobs
-                    WHERE monitor_id = ?
-                    """,
+                DELETE FROM monitoring_worker.monitoring_jobs
+                WHERE monitor_id = ?
+                """,
                     monitorId
             );
         }
+
+        createdMonitorIds.clear();
     }
 
     @Test
@@ -174,6 +176,101 @@ class MonitoringWorkerApplicationTests {
                 );
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void recoversExpiredLeaseAndClearsClaimDetails() {
+        insertJob(-60);
+
+        MonitoringJob claimedJob = jobClaimService.claimNextJob(
+                "worker-1",
+                Duration.ofMinutes(2)
+        ).orElseThrow();
+
+        // Simulate a worker whose lease has expired.
+        jdbcTemplate.update(
+                """
+                UPDATE monitoring_worker.monitoring_jobs
+                SET lease_until = CURRENT_TIMESTAMP - INTERVAL '1 second'
+                WHERE id = ?
+                """,
+                claimedJob.id()
+        );
+
+        int recoveredCount = jobClaimService.recoverExpiredLeases();
+
+        assertThat(recoveredCount).isEqualTo(1);
+
+        var row = jdbcTemplate.queryForMap(
+                """
+                SELECT status, claimed_by, lease_until, attempt_count
+                FROM monitoring_worker.monitoring_jobs
+                WHERE id = ?
+                """,
+                claimedJob.id()
+        );
+
+        assertThat(row.get("status")).isEqualTo("PENDING");
+        assertThat(row.get("claimed_by")).isNull();
+        assertThat(row.get("lease_until")).isNull();
+        assertThat(((Number) row.get("attempt_count")).intValue())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void doesNotRecoverUnexpiredLease() {
+        insertJob(-60);
+
+        MonitoringJob claimedJob = jobClaimService.claimNextJob(
+                "worker-1",
+                Duration.ofMinutes(2)
+        ).orElseThrow();
+
+        int recoveredCount = jobClaimService.recoverExpiredLeases();
+
+        assertThat(recoveredCount).isZero();
+
+        String status = jdbcTemplate.queryForObject(
+                """
+                SELECT status
+                FROM monitoring_worker.monitoring_jobs
+                WHERE id = ?
+                """,
+                String.class,
+                claimedJob.id()
+        );
+
+        assertThat(status).isEqualTo("CLAIMED");
+    }
+
+    @Test
+    void anotherWorkerCanClaimRecoveredJob() {
+        long monitorId = insertJob(-60);
+
+        MonitoringJob firstClaim = jobClaimService.claimNextJob(
+                "worker-1",
+                Duration.ofMinutes(2)
+        ).orElseThrow();
+
+        jdbcTemplate.update(
+                """
+                UPDATE monitoring_worker.monitoring_jobs
+                SET lease_until = CURRENT_TIMESTAMP - INTERVAL '1 second'
+                WHERE id = ?
+                """,
+                firstClaim.id()
+        );
+
+        assertThat(jobClaimService.recoverExpiredLeases()).isEqualTo(1);
+
+        MonitoringJob secondClaim = jobClaimService.claimNextJob(
+                "worker-2",
+                Duration.ofMinutes(2)
+        ).orElseThrow();
+
+        assertThat(secondClaim.monitorId()).isEqualTo(monitorId);
+        assertThat(secondClaim.claimedBy()).isEqualTo("worker-2");
+        assertThat(secondClaim.attemptCount()).isEqualTo(2);
     }
 
     @Test
