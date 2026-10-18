@@ -1,5 +1,6 @@
 package com.watchharbor.monitor.service;
 
+import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.URI;
@@ -32,6 +33,13 @@ public final class MonitorUrlValidator {
     }
 
     public static void validate(String url) {
+        // Reject null or blank input before parsing.
+        if (url == null || url.isBlank()) {
+            throw new InvalidMonitorUrlException(
+                    "Monitor URL must not be blank"
+            );
+        }
+
         URI uri;
 
         try {
@@ -43,12 +51,11 @@ public final class MonitorUrlValidator {
         }
 
         String scheme = uri.getScheme();
+        String host = uri.getHost();
 
         boolean validScheme = scheme != null
                 && (scheme.equalsIgnoreCase("http")
                 || scheme.equalsIgnoreCase("https"));
-
-        String host = uri.getHost();
 
         if (!validScheme
                 || host == null
@@ -60,10 +67,20 @@ public final class MonitorUrlValidator {
             );
         }
 
+        // Reject invalid port numbers.
+        int port = uri.getPort();
+
+        if (port == 0 || port > 65535) {
+            throw new InvalidMonitorUrlException(
+                    "Monitor URL contains an invalid port"
+            );
+        }
+
+        // Continue with the existing destination security checks.
         validateHost(host);
     }
 
-    private static void validateHost(String rawHost) {
+    static void validateHost(String rawHost) {
         String host = rawHost;
 
         // Remove brackets around IPv6 literals.
@@ -172,7 +189,7 @@ public final class MonitorUrlValidator {
     }
 
     private static void validateIpv6Literal(String host) {
-        // Scoped IPv6 addresses are not accepted as monitor destinations.
+        // Scoped IPv6 addresses are not accepted.
         if (host.contains("%")) {
             throw blockedDestination();
         }
@@ -180,44 +197,19 @@ public final class MonitorUrlValidator {
         final InetAddress resolved;
 
         try {
-            // A colon-containing host is parsed as an IPv6 literal.
-            // Hostnames are never resolved by this method.
+            // Parse the IPv6 literal.
             resolved = InetAddress.getByName(host);
         } catch (UnknownHostException exception) {
             throw blockedDestination();
         }
 
+        // Reject anything that is not an IPv6 address.
         if (!(resolved instanceof Inet6Address)) {
             throw blockedDestination();
         }
 
-        byte[] address = resolved.getAddress();
-
-        // Conservatively allow only global-unicast IPv6 addresses.
-        boolean globalUnicast = (address[0] & 0xE0) == 0x20;
-
-        // Exclude special-purpose 2001::/23 and deprecated 6to4.
-        boolean specialPurpose2001 = (address[0] & 0xFF) == 0x20
-                && (address[1] & 0xFF) == 0x01
-                && ((address[2] & 0xFF) & 0xFE) == 0;
-
-        boolean sixToFour = (address[0] & 0xFF) == 0x20
-                && (address[1] & 0xFF) == 0x02;
-        boolean documentationRange2001Db8
-                = (address[0] & 0xFF) == 0x20
-                && (address[1] & 0xFF) == 0x01
-                && (address[2] & 0xFF) == 0x0D
-                && (address[3] & 0xFF) == 0xB8;
-
-        if (!globalUnicast
-                || specialPurpose2001
-                || sixToFour
-                || documentationRange2001Db8
-                || resolved.isAnyLocalAddress()
-                || resolved.isLoopbackAddress()
-                || resolved.isLinkLocalAddress()
-                || resolved.isSiteLocalAddress()
-                || resolved.isMulticastAddress()) {
+        // Reuse the common IPv6 security checks.
+        if (isBlockedIpv6(resolved)) {
             throw blockedDestination();
         }
     }
@@ -264,5 +256,69 @@ public final class MonitorUrlValidator {
 
     private record Cidr(byte[] network, int prefixLength) {
 
+    }
+
+    static void validateResolvedAddress(InetAddress address) {
+        if (address instanceof Inet4Address) {
+            if (isBlockedIpv4(address.getAddress())) {
+                throw blockedDestination();
+            }
+            return;
+        }
+
+        if (address instanceof Inet6Address) {
+            if (isBlockedIpv6(address)) {
+                throw blockedDestination();
+            }
+            return;
+        }
+
+        throw blockedDestination();
+    }
+
+    private static boolean isBlockedIpv6(InetAddress resolved) {
+        byte[] address = resolved.getAddress();
+
+        if (address.length != 16) {
+            return true;
+        }
+
+        // Allow only addresses in the broad IPv6 global-unicast range.
+        boolean globalUnicast = (address[0] & 0xE0) == 0x20;
+
+        // Reject special-purpose 2001::/23.
+        boolean specialPurpose2001
+                = (address[0] & 0xFF) == 0x20
+                && (address[1] & 0xFF) == 0x01
+                && ((address[2] & 0xFF) & 0xFE) == 0;
+
+        // Reject deprecated 6to4 addresses.
+        boolean sixToFour
+                = (address[0] & 0xFF) == 0x20
+                && (address[1] & 0xFF) == 0x02;
+
+        // Reject the IPv6 documentation range 2001:db8::/32.
+        boolean documentationRange2001Db8
+                = (address[0] & 0xFF) == 0x20
+                && (address[1] & 0xFF) == 0x01
+                && (address[2] & 0xFF) == 0x0D
+                && (address[3] & 0xFF) == 0xB8;
+
+        // Reject the IPv6 documentation range 3fff::/20.
+        boolean documentationRange3fff
+                = (address[0] & 0xFF) == 0x3F
+                && (address[1] & 0xFF) == 0xFF
+                && (address[2] & 0xF0) == 0;
+
+        return !globalUnicast
+                || specialPurpose2001
+                || sixToFour
+                || documentationRange2001Db8
+                || documentationRange3fff
+                || resolved.isAnyLocalAddress()
+                || resolved.isLoopbackAddress()
+                || resolved.isLinkLocalAddress()
+                || resolved.isSiteLocalAddress()
+                || resolved.isMulticastAddress();
     }
 }
