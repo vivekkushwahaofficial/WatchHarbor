@@ -59,6 +59,8 @@ class MonitorUrlValidatorTest {
     @ValueSource(strings = {
         "ftp://example.com",
         "not-a-url",
+        "http://example.com:0",
+        "http://example.com:99999",
         "https:///missing-host",
         "https://user:password@example.com"
     })
@@ -76,6 +78,39 @@ class MonitorUrlValidatorTest {
         InvalidMonitorUrlException exception = assertThrows(
                 InvalidMonitorUrlException.class,
                 () -> MonitorUrlValidator.validate("http://999.999.999.999")
+        );
+
+        assertNotNull(exception.getMessage());
+    }
+
+    @Test
+    void rejectsIpv6DocumentationAddressWhenValidatingUrl() {
+        InvalidMonitorUrlException exception = assertThrows(
+                InvalidMonitorUrlException.class,
+                () -> MonitorUrlValidator.validate("https://[3fff::1]/")
+        );
+
+        assertNotNull(exception.getMessage());
+    }
+
+    @Test
+    void rejectsIpv6DocumentationAddressAfterDnsResolution()
+            throws java.net.UnknownHostException {
+        var address = java.net.InetAddress.getByName("3fff::1");
+
+        InvalidMonitorUrlException exception = assertThrows(
+                InvalidMonitorUrlException.class,
+                () -> MonitorUrlValidator.validateResolvedAddress(address)
+        );
+
+        assertNotNull(exception.getMessage());
+    }
+
+    @Test
+    void rejectsNullUrl() {
+        InvalidMonitorUrlException exception = assertThrows(
+                InvalidMonitorUrlException.class,
+                () -> MonitorUrlValidator.validate(null)
         );
 
         assertNotNull(exception.getMessage());
