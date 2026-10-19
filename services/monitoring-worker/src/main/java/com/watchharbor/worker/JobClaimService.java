@@ -118,18 +118,33 @@ public class JobClaimService {
     }
 
     @Transactional
-    public int recoverExpiredLeases() {
+    public int recoverExpiredLeases(int maxAttempts) {
+        if (maxAttempts < 1) {
+            throw new IllegalArgumentException(
+                    "Maximum attempts must be at least one");
+        }
+
         return jdbcTemplate.update(
                 """
             UPDATE monitoring_worker.monitoring_jobs
-            SET status = 'PENDING',
+            SET status = CASE
+                    WHEN attempt_count >= ? THEN 'FAILED'
+                    ELSE 'PENDING'
+                END,
                 claimed_by = NULL,
                 lease_until = NULL,
                 claim_token = NULL,
+                last_error_code = CASE
+                    WHEN attempt_count >= ?
+                        THEN 'LEASE_EXPIRED_MAX_ATTEMPTS'
+                    ELSE 'LEASE_EXPIRED'
+                END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE status = 'CLAIMED'
               AND lease_until <= CURRENT_TIMESTAMP
-            """
+            """,
+                maxAttempts,
+                maxAttempts
         );
     }
 
@@ -196,4 +211,54 @@ public class JobClaimService {
 
         return updatedRows == 1;
     }
+
+    @Transactional
+    public boolean retryJob(
+            long jobId,
+            UUID claimToken,
+            String errorCode,
+            Duration retryDelay
+    ) {
+        Objects.requireNonNull(claimToken, "Claim token must not be null");
+        Objects.requireNonNull(retryDelay, "Retry delay must not be null");
+
+        if (errorCode == null || errorCode.isBlank()) {
+            throw new IllegalArgumentException("Error code must not be blank");
+        }
+
+        if (errorCode.length() > 100) {
+            throw new IllegalArgumentException(
+                    "Error code must not exceed 100 characters");
+        }
+
+        if (retryDelay.toSeconds() < 1) {
+            throw new IllegalArgumentException(
+                    "Retry delay must be at least one second");
+        }
+
+        int updatedRows = jdbcTemplate.update(
+                """
+            UPDATE monitoring_worker.monitoring_jobs
+            SET status = 'PENDING',
+                due_at = CURRENT_TIMESTAMP
+                    + (? * INTERVAL '1 second'),
+                claimed_by = NULL,
+                lease_until = NULL,
+                claim_token = NULL,
+                last_error_code = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND status = 'CLAIMED'
+              AND claim_token = ?
+              AND lease_until > CURRENT_TIMESTAMP
+            """,
+                retryDelay.toSeconds(),
+                errorCode,
+                jobId,
+                claimToken
+        );
+
+        return updatedRows == 1;
+    }
+
 }

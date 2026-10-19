@@ -22,6 +22,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.watchharbor.worker.checker.MonitorCheckResult;
+
 @SpringBootTest
 @ActiveProfiles("test")
 class MonitoringWorkerApplicationTests {
@@ -33,7 +35,8 @@ class MonitoringWorkerApplicationTests {
     private JobClaimService jobClaimService;
     @Autowired
     private PlatformTransactionManager transactionManager;
-
+    @Autowired
+    private CheckResultPersistenceService checkResultPersistenceService;
     private static final AtomicLong MONITOR_IDS
             = new AtomicLong(System.currentTimeMillis() * 1_000L);
 
@@ -44,9 +47,16 @@ class MonitoringWorkerApplicationTests {
         for (Long monitorId : createdMonitorIds) {
             jdbcTemplate.update(
                     """
+                DELETE FROM monitoring_worker.monitoring_check_results
+                WHERE monitor_id = ?
+                    """,
+                    monitorId
+            );
+            jdbcTemplate.update(
+                    """
                 DELETE FROM monitoring_worker.monitoring_jobs
                 WHERE monitor_id = ?
-                """,
+                    """,
                     monitorId
             );
         }
@@ -197,7 +207,7 @@ class MonitoringWorkerApplicationTests {
                 claimedJob.id()
         );
 
-        int recoveredCount = jobClaimService.recoverExpiredLeases();
+        int recoveredCount = jobClaimService.recoverExpiredLeases(3);
 
         assertThat(recoveredCount).isEqualTo(1);
 
@@ -226,7 +236,7 @@ class MonitoringWorkerApplicationTests {
                 Duration.ofMinutes(2)
         ).orElseThrow();
 
-        int recoveredCount = jobClaimService.recoverExpiredLeases();
+        int recoveredCount = jobClaimService.recoverExpiredLeases(3);
 
         assertThat(recoveredCount).isZero();
 
@@ -261,7 +271,7 @@ class MonitoringWorkerApplicationTests {
                 firstClaim.id()
         );
 
-        assertThat(jobClaimService.recoverExpiredLeases()).isEqualTo(1);
+        assertThat(jobClaimService.recoverExpiredLeases(3)).isEqualTo(1);
 
         MonitoringJob secondClaim = jobClaimService.claimNextJob(
                 "worker-2",
@@ -494,7 +504,7 @@ class MonitoringWorkerApplicationTests {
                 firstClaim.id()
         );
 
-        assertThat(jobClaimService.recoverExpiredLeases()).isEqualTo(1);
+        assertThat(jobClaimService.recoverExpiredLeases(3)).isEqualTo(1);
 
         MonitoringJob secondClaim = jobClaimService.claimNextJob(
                 "worker-new",
@@ -522,6 +532,132 @@ class MonitoringWorkerApplicationTests {
         );
 
         assertThat(status).isEqualTo("CLAIMED");
+    }
+
+    @Test
+    void marksExpiredJobFailedWhenMaximumAttemptsAreReached() {
+        long monitorId = insertJob(-60);
+
+        MonitoringJob claimedJob = jobClaimService.claimNextJob(
+                "worker-1",
+                Duration.ofMinutes(2)
+        ).orElseThrow();
+
+        // Simulate that the job has already used all three attempts.
+        jdbcTemplate.update(
+                """
+            UPDATE monitoring_worker.monitoring_jobs
+            SET attempt_count = 3,
+                lease_until = CURRENT_TIMESTAMP - INTERVAL '1 second'
+            WHERE id = ?
+            """,
+                claimedJob.id()
+        );
+
+        int processedCount = jobClaimService.recoverExpiredLeases(3);
+
+        assertThat(processedCount).isEqualTo(1);
+
+        var row = jdbcTemplate.queryForMap(
+                """
+            SELECT status, claimed_by, lease_until, claim_token,
+                   last_error_code
+            FROM monitoring_worker.monitoring_jobs
+            WHERE id = ?
+            """,
+                claimedJob.id()
+        );
+
+        assertThat(row.get("status")).isEqualTo("FAILED");
+        assertThat(row.get("claimed_by")).isNull();
+        assertThat(row.get("lease_until")).isNull();
+        assertThat(row.get("claim_token")).isNull();
+        assertThat(row.get("last_error_code"))
+                .isEqualTo("LEASE_EXPIRED_MAX_ATTEMPTS");
+    }
+
+    @Test
+    void savesCheckResultAndCompletesClaimedJob() {
+        long monitorId = insertJob(-60);
+
+        MonitoringJob job = jobClaimService.claimNextJob(
+                "worker-result-test",
+                Duration.ofSeconds(30)
+        ).orElseThrow();
+
+        MonitorCheckResult result = MonitorCheckResult.success(
+                200,
+                Duration.ofMillis(42)
+        );
+
+        checkResultPersistenceService.saveResultAndComplete(job, result);
+
+        String status = jdbcTemplate.queryForObject(
+                """
+            SELECT status
+            FROM monitoring_worker.monitoring_jobs
+            WHERE id = ?
+            """,
+                String.class,
+                job.id()
+        );
+
+        Integer resultCount = jdbcTemplate.queryForObject(
+                """
+            SELECT COUNT(*)
+            FROM monitoring_worker.monitoring_check_results
+            WHERE job_id = ?
+              AND attempt_count = ?
+            """,
+                Integer.class,
+                job.id(),
+                job.attemptCount()
+        );
+
+        assertThat(status).isEqualTo("SUCCEEDED");
+        assertThat(resultCount).isEqualTo(1);
+    }
+
+    @Test
+    void rollsBackResultWhenClaimIsStale() {
+        long monitorId = insertJob(-60);
+
+        MonitoringJob job = jobClaimService.claimNextJob(
+                "worker-stale-test",
+                Duration.ofSeconds(30)
+        ).orElseThrow();
+
+        // Expire the claim so completeJob rejects it.
+        jdbcTemplate.update(
+                """
+            UPDATE monitoring_worker.monitoring_jobs
+            SET lease_until = CURRENT_TIMESTAMP - INTERVAL '1 second'
+            WHERE id = ?
+            """,
+                job.id()
+        );
+
+        MonitorCheckResult result = MonitorCheckResult.success(
+                200,
+                Duration.ofMillis(42)
+        );
+
+        assertThatThrownBy(
+                () -> checkResultPersistenceService
+                        .saveResultAndComplete(job, result)
+        ).isInstanceOf(StaleClaimException.class);
+
+        Integer resultCount = jdbcTemplate.queryForObject(
+                """
+            SELECT COUNT(*)
+            FROM monitoring_worker.monitoring_check_results
+            WHERE job_id = ?
+            """,
+                Integer.class,
+                job.id()
+        );
+
+        assertThat(resultCount).isZero();
     }
 
     private long insertJob(long secondsFromNow) {
