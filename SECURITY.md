@@ -2,38 +2,25 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in WatchHarbor, please report it privately to the repository maintainer rather than publishing exploit details in a public issue.
+Report vulnerabilities privately to the repository maintainer rather than publishing exploit details in a public issue. Until a dedicated private channel is configured, use GitHub's private vulnerability reporting feature if enabled. Do not include passwords, access tokens, personal data, or production secrets.
 
-Until a dedicated private reporting channel is configured, use GitHub's private vulnerability reporting feature if it is enabled for this repository. Do not include passwords, access tokens, personal data, or production secrets in a report.
-
-Include the following information where possible:
-
-- Affected component and version or commit.
-- A description of the security issue and its potential impact.
-- Reproduction steps that do not harm systems or access data without authorization.
-- Suggested mitigation, if known.
-
-Please allow time for investigation and a fix before publicly disclosing an unpatched vulnerability.
+Include the affected component/commit, impact, safe reproduction steps, and a suggested mitigation where possible. Allow time for investigation and a fix before public disclosure.
 
 ## Security Priorities
 
-WatchHarbor's security requirements include:
-
-- Authentication and authorization before public deployment.
-- Resource ownership checks and appropriate rate limiting.
-- Strict validation of monitored HTTP/HTTPS destinations.
+WatchHarbor is under development. Before public deployment, security work must include:
+- Authentication, authorization, resource ownership checks, rate limiting, and narrow CORS.
+- Strict validation for user-provided HTTP/HTTPS monitoring and keep-alive targets.
 - Blocking loopback, private, link-local, reserved, and cloud-metadata destinations.
-- Validation of DNS resolutions and redirect destinations to mitigate SSRF and DNS rebinding.
-- Connection and response timeouts, response-size limits, and bounded concurrency.
-- Restricted internal service access and narrowly configured CORS.
-- Safe secret management and sanitized error responses.
+- DNS resolution validation, DNS rebinding defenses, and safe redirect handling.
+- Connection/response timeouts, response-size limits, and bounded concurrency.
+- Restricted internal service access, sanitized errors, and safe secret management.
+- Keep-Alive Assistance limited to user-authorized endpoints and provider-permitted traffic. It must not try to bypass provider rules or quotas.
 
 ## Development Status
 
-WatchHarbor is under active development. The presence of security-related validation and tests does not mean every security requirement has been implemented or independently audited.
-
-Do not use an unfinished or unreviewed deployment to monitor sensitive systems or treat it as a production-ready security service.
+Some destination-validation and worker protections have been implemented and tested, but this does not mean every security requirement has been completed or independently audited. Do not treat WatchHarbor as production-ready until relevant controls are implemented and verified.
 
 ## Supported Versions
 
-No formal release versions have been declared yet. Security fixes and support expectations will be documented when release versions are established.
+No formal release versions have been declared. Security support expectations will be documented when releases are established.

@@ -186,7 +186,25 @@ This manual test verified the following path:
 
 This is evidence of one successful end-to-end execution. It does not prove recurring scheduling, high concurrency, production availability, or successful handling of every failure mode.
 
-## 6. Security and Failure-Handling Tests
+## 6. Keep-Alive Assistance Test Plan (Planned)
+
+The dedicated keep-alive configuration and scheduling workflow is a product goal but is not claimed as implemented yet. When implemented, add and run tests for:
+
+- Creating configuration for an authorized HTTP/HTTPS target with a permitted interval.
+- Rejecting invalid URLs, unsupported schemes, and intervals outside configured/provider-permitted limits.
+- Enabling, pausing, and resuming schedules; checking next execution time.
+- Distinguishing keep-alive jobs/results from ordinary uptime checks.
+- Idempotent scheduling, duplicate claim prevention, and duplicate result prevention.
+- HTTP success, non-success status, timeout, unreachable target, and bounded retries.
+- Recording execution time, response time, outcome/status, and failure category.
+- Worker restart, expired leases, and recovery of due jobs.
+- Applying SSRF, DNS rebinding, redirect, response-size, timeout, and concurrency controls equally to keep-alive targets.
+- Respecting configured request rates and provider terms; never implementing restriction evasion.
+- Documenting that scheduled jobs cannot run while WatchHarbor's scheduler/worker is offline or asleep.
+
+Do not describe Keep-Alive Assistance as implemented until its code and applicable tests have actually been executed and reviewed.
+
+## 7. Security and Failure-Handling Tests
 
 The worker test suite includes tests related to unsafe destinations, DNS behavior, response handling, lease recovery, and processing failures.
 
@@ -202,7 +220,7 @@ Future test reports should identify the exact test classes and methods for each 
 
 A passing test suite must not be interpreted as proof that the worker is secure against every SSRF or distributed-system failure scenario.
 
-## 7. Test Reports and Evidence
+## 8. Test Reports and Evidence
 
 Maven test reports are generated under each service's `target/surefire-reports/` directory when Surefire is configured for the test suite.
 
@@ -220,7 +238,7 @@ Useful evidence includes:
 
 Do not commit secrets, `.env` files, passwords, access tokens, or sensitive production logs.
 
-## 8. Current Limitations
+## 9. Current Limitations
 
 The recorded verification does not yet establish:
 
@@ -230,10 +248,11 @@ The recorded verification does not yet establish:
 - Multi-worker concurrency under a controlled integration test.
 - A complete recurring scheduling workflow.
 - Production deployment readiness.
+- A completed Keep-Alive Assistance configuration and lifecycle workflow.
 
 These are future verification tasks, not completed claims.
 
-## 9. Reproducibility Checklist
+## 10. Reproducibility Checklist
 
 Before reporting a new test run:
 

@@ -1,65 +1,80 @@
 # WatchHarbor Architecture
 
-## 1. Overview
+## 1. Product Goal
 
-WatchHarbor monitors HTTP and HTTPS endpoints, records check
-results, tracks incidents, and supports notifications.
+WatchHarbor has two related but distinct capabilities:
 
-## 2. Initial Architecture
+- **Uptime monitoring:** measures the availability and response time of HTTP/HTTPS endpoints and provides evidence for history, incidents, and alerts.
+- **Keep-Alive Assistance:** schedules bounded requests to endpoints the user is authorized to operate, where hosting-provider terms permit the traffic, to help reduce inactivity-based sleeping.
 
-The first implementation will be the Monitor Service.
+Keep-alive is best-effort. It cannot guarantee that a service stays awake or override provider terms, quotas, or restrictions. WatchHarbor itself must be running for scheduled work to execute.
 
-Responsibilities:
-- Accept monitor configuration.
-- Validate request data.
-- Persist monitor metadata.
-- Expose versioned REST APIs.
+## 2. Current Architecture
 
-## 3. Planned Components
+The existing implementation includes:
 
-1. Monitor Service
-2. Auth Service
-3. Monitoring Worker
-4. History Service
-5. Incident Service
-6. Notification Service
-7. API Gateway
-8. React Frontend
+- **Monitor Service:** stores and manages monitor configuration and lifecycle.
+- **Monitoring Worker:** claims queued jobs, safely checks HTTP/HTTPS targets, and records worker-owned results.
+- **PostgreSQL and Flyway:** persist service data and queue/result records.
+- **GitHub Actions:** runs backend verification for the Monitor Service and Monitoring Worker.
 
-Components will be implemented incrementally.
+These components have been implemented incrementally. Do not infer that future workflows are already implemented because a component exists.
 
-## 4. Data Ownership
+## 3. Planned Service Responsibilities
 
-Each service will own its data.
+1. **Monitor Service:** monitor configuration, validation, lifecycle, and scheduling metadata.
+2. **Monitoring Worker:** claim and execute due jobs. Health checks and keep-alive requests must be distinguishable by job purpose and result type.
+3. **Auth Service:** identity, authentication, password hashing, and authorization.
+4. **History Service:** paginated check and keep-alive execution history, response times, and documented uptime statistics.
+5. **Incident Service:** confirmed outages and recovery.
+6. **Notification Service:** outage/recovery alerts with bounded retries and deduplication.
+7. **API Gateway:** frontend entry point when useful.
+8. **React frontend:** monitors, keep-alive controls, history, incidents, and notification settings.
 
-Services will communicate through documented REST APIs initially.
-A PostgreSQL-backed job queue will be introduced for monitoring work.
+Implement these services only when their milestone is ready; avoid placeholder services without an end-to-end use case.
 
-## 5. Monitoring Workflow
+## 4. Keep-Alive Workflow (Planned)
 
-1. A user submits a monitor configuration.
-2. The Monitor Service validates and saves it.
-3. A scheduler identifies due checks.
-4. The worker safely claims and executes checks.
-5. Check results are persisted through a documented contract.
-6. Incident processing evaluates failures and recovery.
-7. Notification processing handles alerts.
-8. The frontend displays monitoring information.
+1. A user configures a backend URL they are authorized to operate and selects a permitted interval.
+2. The system validates the configuration and stores enabled/paused state and next execution time.
+3. The scheduler makes due work available in the PostgreSQL-backed job queue.
+4. The worker claims a job safely and executes a bounded HTTP/HTTPS request.
+5. The system records execution time, status/outcome, response time, and failure category.
+6. The user can pause or resume the schedule and inspect its history.
+7. Duplicate processing and restart recovery are handled deliberately and covered by tests.
 
-## 6. Security
+The exact API, database ownership, queue contract, and result persistence must be designed and reviewed before implementation.
 
-Before public deployment:
-- Implement authentication and authorization.
-- Enforce resource ownership.
-- Restrict outbound monitoring requests.
-- Validate DNS resolutions and redirect destinations.
-- Apply request timeouts and response-size limits.
-- Keep credentials and secrets out of Git.
+## 5. Reliability Principles
 
-## 7. Development Constraints
+- Keep network calls out of scheduler threads.
+- Use bounded retries/backoff and timeouts.
+- Make processing idempotent and prevent duplicate jobs/results.
+- Handle unreachable targets, timeouts, worker restart, lease expiry, and scheduler failure.
+- Use correlation IDs where useful.
+- Do not claim production-level reliability until tested.
 
-- Budget: ₹0.
-- Local development comes first.
-- Docker is optional during initial development.
-- Tests must be executed before reporting them as passed.
-- Planned components must not be described as implemented.
+## 6. Data Ownership
+
+Each service owns its tables and schema. No service may directly modify another service's tables. Use versioned REST APIs or documented event contracts. Avoid circular dependencies and unnecessary distributed transactions.
+
+## 7. Security
+
+Every user-provided health-check and keep-alive URL is an SSRF risk. Before public deployment:
+- Allow only HTTP/HTTPS.
+- Block loopback, private, link-local, reserved, and cloud-metadata destinations.
+- Validate DNS resolutions and defend against DNS rebinding.
+- Disable redirects initially or validate each destination.
+- Apply connection and total timeouts, response-size and concurrency limits.
+- Require authentication, authorization, ownership validation, rate limits, and narrow CORS.
+- Do not expose internal endpoints, credentials, or stack traces.
+
+Keep-alive schedules must respect provider rules and quotas; do not implement restriction-evasion behavior.
+
+## 8. Zero-Cost and Operational Limits
+
+Local development is the primary reliable environment. Use free/open-source tools and do not introduce paid infrastructure without explicit approval. A hosted scheduler cannot run while WatchHarbor itself is asleep or offline; document any free-tier sleep, quota, persistence, and availability limitations.
+
+## 9. Status Discipline
+
+Planned workflows are not implemented features. Update this document only when code, tests, and verification evidence support the status change.
