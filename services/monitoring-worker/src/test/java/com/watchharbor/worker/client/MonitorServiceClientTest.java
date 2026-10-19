@@ -61,6 +61,32 @@ class MonitorServiceClientTest {
                 exchange.sendResponseHeaders(503, -1);
             }
         });
+        server.createContext("/api/v1/monitors", exchange -> {
+            String query = exchange.getRequestURI().getQuery();
+            int page = 0;
+
+            if (query != null) {
+                for (String parameter : query.split("&")) {
+                    String[] pair = parameter.split("=", 2);
+                    if (pair.length == 2 && pair[0].equals("page")) {
+                        page = Integer.parseInt(pair[1]);
+                    }
+                }
+            }
+            String json = page == 1
+                    ? monitorPageWithContentJson()
+                    : monitorPageJson(page, true);
+
+            byte[] response = json.getBytes(StandardCharsets.UTF_8);
+
+            try (exchange) {
+                exchange.getResponseHeaders().add(
+                        "Content-Type", "application/json"
+                );
+                exchange.sendResponseHeaders(200, response.length);
+                exchange.getResponseBody().write(response);
+            }
+        });
 
         server.start();
 
@@ -78,6 +104,43 @@ class MonitorServiceClientTest {
         if (executor != null) {
             executor.shutdownNow();
         }
+    }
+
+    private String monitorPageJson(int page, boolean last) {
+        return """
+            {
+              "content": [],
+              "page": %d,
+              "size": 10,
+              "totalElements": 0,
+              "totalPages": 0,
+              "first": %s,
+              "last": %s
+            }
+            """.formatted(page, page == 0, last);
+    }
+
+    private String monitorPageWithContentJson() {
+        return """
+        {
+          "content": [
+            {
+              "id": 10,
+              "name": "Paginated Website",
+              "url": "https://example.org",
+              "createdAt": "2026-10-19T10:00:00Z",
+              "checkIntervalSeconds": 600,
+              "enabled": true
+            }
+          ],
+          "page": 1,
+          "size": 10,
+          "totalElements": 11,
+          "totalPages": 2,
+          "first": false,
+          "last": true
+        }
+        """;
     }
 
     @Test
@@ -126,6 +189,52 @@ class MonitorServiceClientTest {
                 .isInstanceOf(IllegalArgumentException.class);
 
         assertThatThrownBy(() -> client.getMonitorById(-1L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void returnsMonitorPageWhenServiceRespondsSuccessfully() {
+        MonitorPageResponse response = client.getMonitors(1, 10);
+
+        assertThat(response.content()).hasSize(1);
+
+        MonitorResponse monitor = response.content().get(0);
+
+        assertThat(monitor.id()).isEqualTo(10L);
+        assertThat(monitor.name()).isEqualTo("Paginated Website");
+        assertThat(monitor.url()).isEqualTo("https://example.org");
+        assertThat(monitor.checkIntervalSeconds()).isEqualTo(600);
+        assertThat(monitor.enabled()).isTrue();
+        assertThat(monitor.createdAt())
+                .isEqualTo(Instant.parse("2026-10-19T10:00:00Z"));
+
+        assertThat(response.page()).isEqualTo(1);
+        assertThat(response.size()).isEqualTo(10);
+        assertThat(response.totalElements()).isEqualTo(11);
+        assertThat(response.totalPages()).isEqualTo(2);
+        assertThat(response.first()).isFalse();
+        assertThat(response.last()).isTrue();
+    }
+
+    @Test
+    void acceptsAnEmptyMonitorPage() {
+        MonitorPageResponse response = client.getMonitors(0, 10);
+
+        assertThat(response.content()).isEmpty();
+        assertThat(response.page()).isZero();
+        assertThat(response.size()).isEqualTo(10);
+        assertThat(response.last()).isTrue();
+    }
+
+    @Test
+    void rejectsInvalidPaginationArgumentsBeforeMakingARequest() {
+        assertThatThrownBy(() -> client.getMonitors(-1, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThatThrownBy(() -> client.getMonitors(0, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThatThrownBy(() -> client.getMonitors(0, 101))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }
