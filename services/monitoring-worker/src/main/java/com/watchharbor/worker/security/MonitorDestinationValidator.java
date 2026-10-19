@@ -227,9 +227,16 @@ public final class MonitorDestinationValidator {
             validateIpv4(ipv4);
         }
 
-        // Reject the IPv6 discard-only range.
+        // IPv6 discard-only range: 100::/64.
+        // Check the first 64 bits, not merely the first 16 bits.
         if (Byte.toUnsignedInt(bytes[0]) == 0x01
-                && Byte.toUnsignedInt(bytes[1]) == 0x00) {
+                && Byte.toUnsignedInt(bytes[1]) == 0x00
+                && bytes[2] == 0
+                && bytes[3] == 0
+                && bytes[4] == 0
+                && bytes[5] == 0
+                && bytes[6] == 0
+                && bytes[7] == 0) {
             rejectAddress();
         }
     }

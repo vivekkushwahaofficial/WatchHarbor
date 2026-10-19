@@ -147,6 +147,20 @@ class MonitorDestinationValidatorTest {
     }
 
     @Test
+    void rejectsIpv6DiscardOnlyRangeAtEndOfPrefix() throws Exception {
+        assertUnsafe("100:0:0:0:0:0:0:ffff");
+    }
+
+    @Test
+    void acceptsIpv6OutsideDiscardOnlyPrefix() throws Exception {
+        InetAddress address = InetAddress.getByName("100:0:0:1::1");
+
+        assertTrue(address instanceof java.net.Inet6Address);
+
+        MonitorDestinationValidator.validateResolvedAddress(address);
+    }
+
+    @Test
     void rejectsCarrierGradeNatIpv4() throws Exception {
         assertUnsafe("100.64.0.1");
     }
