@@ -74,4 +74,31 @@ For each milestone:
 
 ## Current Status
 
-Repository initialization and documentation are in progress. No application features are claimed as implemented.
+### Completed and verified locally
+
+- Monitor Service implementation and automated verification.
+- Monitoring Worker implementation and automated verification.
+- PostgreSQL persistence and Flyway migrations for the implemented services.
+- Backend GitHub Actions workflow for the Monitor Service and Monitoring Worker.
+- Testing documentation in `docs/TESTING.md`.
+
+The recorded local test results are:
+
+- Monitor Service: 87 tests, zero failures, zero errors, zero skipped.
+- Monitoring Worker: 96 tests, zero failures, zero errors, zero skipped.
+
+These results describe the recorded local runs. Future changes must be verified independently.
+
+The Backend CI workflow has also completed successfully for commit `9712c6d`. Check GitHub Actions for the status of subsequent runs.
+
+### Planned
+
+- Authentication and authorization.
+- History and uptime statistics.
+- Incident management.
+- Notifications.
+- API Gateway.
+- React dashboard.
+- Additional integration, resilience, and security verification.
+
+Update this section when a milestone has been implemented and its verification evidence is available.

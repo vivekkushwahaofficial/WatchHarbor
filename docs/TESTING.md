@@ -30,9 +30,32 @@ The following test runs completed successfully.
 | Monitor Service   | `./mvnw clean verify` |    87 |        0 |      0 |       0 | BUILD SUCCESS |
 | Monitoring Worker | `./mvnw clean verify` |    96 |        0 |      0 |       0 | BUILD SUCCESS |
 
+### 3.1 GitHub Actions Verification
+
+The backend CI workflow is located at
+`.github/workflows/backend-ci.yml`.
+
+It runs separate verification jobs for:
+
+- Monitor Service
+- Monitoring Worker
+
+The workflow is triggered by pushes to `main`, pull requests targeting
+`main`, and manual dispatch.
+
+**Recorded CI result:** The workflow completed successfully for commit
+`9712c6d` (`ci: add backend verification workflow`).
+
+This confirms the overall workflow succeeded for that commit. Check the
+individual job logs in GitHub Actions for detailed results.
+
+[View GitHub Actions runs](https://github.com/vivekkushwahaofficial/WatchHarbor/actions).
+
+The recorded local test counts above are separate from the CI result.
+
 These results were observed during local verification on 19 October 2026. They describe those test runs, not a guarantee that every future commit will pass.
 
-### 3.1 Monitor Service
+### 3.2 Monitor Service
 
 From the repository root, run:
 
@@ -45,7 +68,7 @@ The `clean` goal removes previous build output. The `verify` goal executes the c
 
 **Recorded result:** 87 tests, zero failures, zero errors, zero skipped, and `BUILD SUCCESS`.
 
-### 3.2 Monitoring Worker
+### 3.3 Monitoring Worker
 
 From the repository root, run:
 
