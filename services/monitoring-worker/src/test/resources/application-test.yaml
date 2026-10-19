@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: monitoring-worker-test
+
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/watchharbor_test}
+    username: ${TEST_DB_USERNAME:postgres}
+    password: ${TEST_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  flyway:
+    enabled: true
+    default-schema: monitoring_worker
+    schemas: monitoring_worker
+    create-schemas: true
+    locations: classpath:db/migration
