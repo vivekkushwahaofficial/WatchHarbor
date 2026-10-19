@@ -73,4 +73,43 @@ public class MonitorServiceClient {
             );
         }
     }
+
+    public MonitorPageResponse getMonitors(int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new IllegalArgumentException(
+                    "Page must be non-negative and size must be between 1 and 100"
+            );
+        }
+
+        try {
+            MonitorPageResponse response = restClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/v1/monitors")
+                            .queryParam("page", page)
+                            .queryParam("size", size)
+                            .build())
+                    .retrieve()
+                    .body(MonitorPageResponse.class);
+
+            if (response == null || response.content() == null) {
+                throw new MonitorServiceException(
+                        "Monitor Service returned an empty response"
+                );
+            }
+
+            return response;
+
+        } catch (HttpStatusCodeException exception) {
+            throw new MonitorServiceException(
+                    "Monitor Service returned an unsuccessful response",
+                    exception
+            );
+        } catch (ResourceAccessException exception) {
+            throw new MonitorServiceException(
+                    "Monitor Service could not be reached",
+                    exception
+            );
+        }
+    }
+
 }

@@ -31,3 +31,5 @@ worker:
   max-attempts: ${WORKER_MAX_ATTEMPTS:3}
   retry-delay-seconds: ${WORKER_RETRY_DELAY_SECONDS:5}
   polling-interval-ms: ${WORKER_POLLING_INTERVAL_MS:1000}
+  reconciliation-interval-ms: ${WORKER_RECONCILIATION_INTERVAL_MS:5000}
+  scheduling-page-size: ${WORKER_SCHEDULING_PAGE_SIZE:100}
