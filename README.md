@@ -14,8 +14,9 @@ platform built with Java, Spring Boot, PostgreSQL, React, and TypeScript.
 ## Technology Stack
 
 ### Backend
+
 - Java 21
-- Spring Boot 3.x
+- Spring Boot 4.1.x
 - Spring Web
 - Spring Data JPA
 - Spring Security
@@ -24,12 +25,14 @@ platform built with Java, Spring Boot, PostgreSQL, React, and TypeScript.
 - Maven
 
 ### Frontend
+
 - React
 - TypeScript
 - Vite
 - Tailwind CSS
 
 ### Development Tools
+
 - Git and GitHub
 - JUnit 5 and Mockito
 - Docker Compose (optional for initial development)
